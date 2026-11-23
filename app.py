@@ -27,7 +27,9 @@ BASE_DATOS       = "pdf_embeddings_db"
 COLECCION        = "pdf_vectors"
 INDICE           = "vector_index"
 MODELO_EMBEDDING = "gemini-embedding-001"   # 3072 dimensiones
-MODELO_LLM       = "gemini-2.5-flash"
+# gemini-2.5-flash ya no está disponible para cuentas nuevas: se prueban estos
+# modelos en orden y se pasa al siguiente si uno está saturado (503) o no existe (404).
+MODELOS_LLM      = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
 K_POR_DEFECTO    = 5                        # fragmentos recuperados (limit)
 NUM_CANDIDATOS   = 100                      # candidatos evaluados por $vectorSearch
 ROL_ASISTENTE    = "un asistente experto en adopción de la nube"
@@ -112,8 +114,14 @@ Pregunta: {pregunta}
 
 Responde de forma concisa y clara en español."""
 
-    resp = client_genai.models.generate_content(model=MODELO_LLM, contents=prompt)
-    return resp.text
+    ultimo_error = None
+    for modelo in MODELOS_LLM:
+        try:
+            resp = client_genai.models.generate_content(model=modelo, contents=prompt)
+            return resp.text
+        except Exception as e:  # 503 saturado, 404 no disponible, 429 cuota
+            ultimo_error = e
+    raise ultimo_error
 
 
 # ---------------------------------------------------------------------------
