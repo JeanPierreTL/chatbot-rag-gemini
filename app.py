@@ -29,7 +29,7 @@ INDICE           = "vector_index"
 MODELO_EMBEDDING = "gemini-embedding-001"   # 3072 dimensiones
 # gemini-2.5-flash ya no está disponible para cuentas nuevas: se prueban estos
 # modelos en orden y se pasa al siguiente si uno está saturado (503) o no existe (404).
-MODELOS_LLM      = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+MODELOS_LLM      = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]
 K_POR_DEFECTO    = 5                        # fragmentos recuperados (limit)
 NUM_CANDIDATOS   = 100                      # candidatos evaluados por $vectorSearch
 ROL_ASISTENTE    = "un asistente experto en adopción de la nube"
@@ -47,7 +47,7 @@ MONGODB_URI    = st.secrets["app"]["MONGODB_URI"]
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def obtener_cliente_genai():
-    return genai.Client(api_key=GOOGLE_API_KEY)
+    return genai.Client(api_key=GOOGLE_API_KEY, http_options=types.HttpOptions(timeout=40000))  # 40 s máx. por llamada
 
 
 @st.cache_resource
