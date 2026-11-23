@@ -1,0 +1,6 @@
+# Nunca subir credenciales
+.streamlit/secrets.toml
+.env
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
