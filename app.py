@@ -12,6 +12,8 @@ Las credenciales NO están en este archivo: se leen de st.secrets
     MONGODB_URI    = "mongodb+srv://<usuario>:<password>@<cluster>.mongodb.net/"
 """
 
+import time
+
 import pandas as pd
 import pymongo
 import streamlit as st
@@ -64,13 +66,19 @@ collection   = obtener_coleccion()
 # Paso 10. Recuperación semántica
 # ---------------------------------------------------------------------------
 def crear_embedding_consulta(texto: str) -> list[float]:
-    """La pregunta se vectoriza con task_type=RETRIEVAL_QUERY."""
-    resp = client_genai.models.embed_content(
-        model=MODELO_EMBEDDING,
-        contents=texto,
-        config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
-    )
-    return resp.embeddings[0].values
+    """La pregunta se vectoriza con task_type=RETRIEVAL_QUERY (con reintentos si Gemini está saturado)."""
+    for intento in range(4):
+        try:
+            resp = client_genai.models.embed_content(
+                model=MODELO_EMBEDDING,
+                contents=texto,
+                config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
+            )
+            return resp.embeddings[0].values
+        except Exception:
+            if intento == 3:
+                raise
+            time.sleep(2 * (intento + 1))
 
 
 def buscar_similares(pregunta: str, k: int = K_POR_DEFECTO) -> list[dict]:
@@ -115,12 +123,14 @@ Pregunta: {pregunta}
 Responde de forma concisa y clara en español."""
 
     ultimo_error = None
-    for modelo in MODELOS_LLM:
-        try:
-            resp = client_genai.models.generate_content(model=modelo, contents=prompt)
-            return resp.text
-        except Exception as e:  # 503 saturado, 404 no disponible, 429 cuota
-            ultimo_error = e
+    for ronda in range(3):                      # hasta 3 rondas sobre la lista de modelos
+        for modelo in MODELOS_LLM:
+            try:
+                resp = client_genai.models.generate_content(model=modelo, contents=prompt)
+                return resp.text
+            except Exception as e:  # 503 saturado, 404 no disponible, 429 cuota
+                ultimo_error = e
+        time.sleep(3 * (ronda + 1))
     raise ultimo_error
 
 
@@ -179,12 +189,14 @@ if pregunta:
         st.markdown(pregunta)
 
     with st.chat_message("assistant"):
+        fragmentos = []
         try:
             with st.spinner("Buscando en el documento y redactando la respuesta…"):
                 fragmentos = buscar_similares(pregunta, k)
                 respuesta = generar_respuesta(pregunta, fragmentos)
         except Exception as e:  # muestra el error sin exponer credenciales
-            fragmentos, respuesta = [], f"⚠️ Ocurrió un error: {type(e).__name__}: {e}"
+            respuesta = (f"⚠️ Gemini no respondió ({type(e).__name__}). "
+                         "Suele ser saturación temporal del servicio: intente de nuevo en unos segundos.")
         st.markdown(respuesta)
         mostrar_fragmentos(fragmentos)
 
